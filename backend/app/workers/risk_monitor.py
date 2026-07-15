@@ -238,8 +238,19 @@ def risk_monitor_tick():
             "lastUpdated": datetime.utcnow().isoformat() + "Z"
         }
         
-        redis_client.publish("kavach:risk_state", json.dumps(state_payload))
-        logger.debug("Successfully published risk state to Redis.")
+        # 10. Broadcast current state to all connected clients
+        import asyncio
+        from app.core.pubsub import pubsub_manager
+        try:
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(pubsub_manager.broadcast(state_payload))
+            except RuntimeError:
+                # No running event loop, run synchronously
+                asyncio.run(pubsub_manager.broadcast(state_payload))
+            logger.debug("Successfully broadcasted risk state.")
+        except Exception as e:
+            logger.error(f"Failed to broadcast state: {e}")
 
         return "SUCCESS"
     except Exception as e:

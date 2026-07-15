@@ -16,19 +16,26 @@ logging.basicConfig(
 )
 logger = logging.getLogger("kavach.main")
 
-# Async Redis client for WebSocket subscriptions
-redis_async_client = None
+# Background task runner loop
+async def risk_monitor_loop():
+    logger.info("Starting background risk monitoring thread loop...")
+    from app.workers.risk_monitor import risk_monitor_tick
+    while True:
+        try:
+            # Execute the tick task in a separate thread to avoid blocking the event loop
+            await asyncio.to_thread(risk_monitor_tick)
+        except Exception as e:
+            logger.error(f"Error in background risk monitor loop: {e}")
+        await asyncio.sleep(10)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: initialize async redis connection
-    global redis_async_client
-    logger.info("Initializing Async Redis client for WebSocket support...")
-    redis_async_client = async_redis.from_url(settings.REDIS_URL, decode_responses=True)
+    # Startup: spawn background risk loop
+    app.state.risk_task = asyncio.create_task(risk_monitor_loop())
     yield
-    # Shutdown: close connections
-    logger.info("Closing Async Redis client...")
-    await redis_async_client.close()
+    # Shutdown: cancel task
+    logger.info("Stopping background risk monitoring task...")
+    app.state.risk_task.cancel()
 
 app = FastAPI(
     title="Kavach — Retail F&O Risk & Position-Sizing Engine",
@@ -65,37 +72,22 @@ def health_check():
 @app.websocket("/ws/risk")
 async def websocket_risk_endpoint(websocket: WebSocket):
     """
-    WebSocket endpoint that subscribes to Redis pub/sub 'kavach:risk_state'
+    WebSocket endpoint that subscribes to in-memory pubsub_manager
     and streams live risk state updates to the dashboard.
     """
-    await websocket.accept()
-    logger.info("WebSocket client connected.")
+    from app.core.pubsub import pubsub_manager
+    await pubsub_manager.connect(websocket)
     
-    pubsub = redis_async_client.pubsub()
-    await pubsub.subscribe("kavach:risk_state")
-    
-    # Send initial state or a connection ack
+    # Send connection ack
     await websocket.send_json({"type": "ACK", "message": "Connected to Kavach Live Risk Stream"})
     
     try:
         while True:
-            # We listen to pub/sub messages asynchronously
-            message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
-            if message and message.get("type") == "message":
-                data = json.loads(message.get("data", "{}"))
-                await websocket.send_json(data)
-            
-            # Simple heartbeat/check to ensure client hasn't closed connection
-            # We can receive text or bytes, but we just check if it throws an error
-            try:
-                # Receive with a tiny timeout to avoid blocking
-                await asyncio.wait_for(websocket.receive_text(), timeout=0.01)
-            except asyncio.TimeoutError:
-                pass
+            # Keep connection open and check heartbeats
+            # If client disconnects, receive_text will raise WebSocketDisconnect
+            await websocket.receive_text()
     except WebSocketDisconnect:
-        logger.info("WebSocket client disconnected.")
+        pubsub_manager.disconnect(websocket)
     except Exception as e:
         logger.error(f"Error in WebSocket handler: {e}")
-    finally:
-        await pubsub.unsubscribe("kavach:risk_state")
-        await pubsub.close()
+        pubsub_manager.disconnect(websocket)
