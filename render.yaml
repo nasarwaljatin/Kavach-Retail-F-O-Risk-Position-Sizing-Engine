@@ -16,7 +16,7 @@ services:
           type: redis
           name: kavach-redis
           property: connectionString
-      - group: kavach-common
+      - fromGroup: kavach-common
 
   # 2. Celery Worker (executes risk monitoring loop)
   - type: worker
@@ -35,7 +35,7 @@ services:
           type: redis
           name: kavach-redis
           property: connectionString
-      - group: kavach-common
+      - fromGroup: kavach-common
 
   # 3. Celery Beat (triggers the tick every 10s)
   - type: worker
@@ -54,7 +54,7 @@ services:
           type: redis
           name: kavach-redis
           property: connectionString
-      - group: kavach-common
+      - fromGroup: kavach-common
 
   # 4. Redis Cache (pub/sub & state storage)
   - type: redis
