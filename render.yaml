@@ -1,0 +1,137 @@
+services:
+  # 1. FastAPI Web Backend
+  - type: web
+    name: kavach-backend
+    env: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: kavach-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: kavach-redis
+          property: connectionString
+      - key: ENV
+        value: production
+      - key: PAPER_MODE
+        value: "True"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ANGELONE_CLIENT_CODE
+        sync: false
+      - key: ANGELONE_PASSWORD
+        sync: false
+      - key: ANGELONE_TOTP_SECRET
+        sync: false
+      - key: ANGELONE_API_KEY
+        sync: false
+
+  # 2. Celery Worker (executes risk monitoring loop)
+  - type: worker
+    name: kavach-worker
+    env: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A app.workers.celery_app.celery worker --loglevel=info
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: kavach-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: kavach-redis
+          property: connectionString
+      - key: ENV
+        value: production
+      - key: PAPER_MODE
+        value: "True"
+      - key: SECRET_KEY
+        fromService:
+          type: web
+          name: kavach-backend
+          property: envVar:SECRET_KEY
+      - key: ANGELONE_CLIENT_CODE
+        fromService:
+          type: web
+          name: kavach-backend
+          property: envVar:ANGELONE_CLIENT_CODE
+      - key: ANGELONE_PASSWORD
+        fromService:
+          type: web
+          name: kavach-backend
+          property: envVar:ANGELONE_PASSWORD
+      - key: ANGELONE_TOTP_SECRET
+        fromService:
+          type: web
+          name: kavach-backend
+          property: envVar:ANGELONE_TOTP_SECRET
+      - key: ANGELONE_API_KEY
+        fromService:
+          type: web
+          name: kavach-backend
+          property: envVar:ANGELONE_API_KEY
+
+  # 3. Celery Beat (triggers the tick every 10s)
+  - type: worker
+    name: kavach-beat
+    env: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A app.workers.celery_app.celery beat --loglevel=info
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: kavach-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: kavach-redis
+          property: connectionString
+      - key: ENV
+        value: production
+      - key: PAPER_MODE
+        value: "True"
+      - key: SECRET_KEY
+        fromService:
+          type: web
+          name: kavach-backend
+          property: envVar:SECRET_KEY
+      - key: ANGELONE_CLIENT_CODE
+        fromService:
+          type: web
+          name: kavach-backend
+          property: envVar:ANGELONE_CLIENT_CODE
+      - key: ANGELONE_PASSWORD
+        fromService:
+          type: web
+          name: kavach-backend
+          property: envVar:ANGELONE_PASSWORD
+      - key: ANGELONE_TOTP_SECRET
+        fromService:
+          type: web
+          name: kavach-backend
+          property: envVar:ANGELONE_TOTP_SECRET
+      - key: ANGELONE_API_KEY
+        fromService:
+          type: web
+          name: kavach-backend
+          property: envVar:ANGELONE_API_KEY
+
+  # 4. Redis Cache (pub/sub & state storage)
+  - type: redis
+    name: kavach-redis
+    plan: free
+    ipAllowList: [] # only allow internal services
+
+# 5. PostgreSQL Database (stores logs & configuration)
+databases:
+  - name: kavach-db
+    plan: free
