@@ -1,0 +1,139 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: kavach-db
+    restart: always
+    environment:
+      POSTGRES_USER: kavach
+      POSTGRES_PASSWORD: kavach
+      POSTGRES_DB: kavach
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kavach"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: kavach-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: kavach-backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://kavach:kavach@db:5432/kavach
+      - REDIS_URL=redis://redis:6379/0
+      - ANGELONE_CLIENT_CODE=${ANGELONE_CLIENT_CODE}
+      - ANGELONE_PASSWORD=${ANGELONE_PASSWORD}
+      - ANGELONE_TOTP_SECRET=${ANGELONE_TOTP_SECRET}
+      - ANGELONE_API_KEY=${ANGELONE_API_KEY}
+      - MAX_DAILY_LOSS_PCT=${MAX_DAILY_LOSS_PCT}
+      - MAX_POSITION_CONCENTRATION_PCT=${MAX_POSITION_CONCENTRATION_PCT}
+      - MAX_MARGIN_UTILISATION_PCT=${MAX_MARGIN_UTILISATION_PCT}
+      - KELLY_FRACTION_MULTIPLIER=${KELLY_FRACTION_MULTIPLIER}
+      - ORDER_VELOCITY_LIMIT_PER_10MIN=${ORDER_VELOCITY_LIMIT_PER_10MIN}
+      - EXPIRY_DAY_SIZE_DAMPENER=${EXPIRY_DAY_SIZE_DAMPENER}
+      - ENV=${ENV}
+      - SECRET_KEY=${SECRET_KEY}
+      - PAPER_MODE=${PAPER_MODE}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: kavach-celery-worker
+    restart: always
+    command: celery -A app.workers.celery_app.celery worker --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql://kavach:kavach@db:5432/kavach
+      - REDIS_URL=redis://redis:6379/0
+      - ANGELONE_CLIENT_CODE=${ANGELONE_CLIENT_CODE}
+      - ANGELONE_PASSWORD=${ANGELONE_PASSWORD}
+      - ANGELONE_TOTP_SECRET=${ANGELONE_TOTP_SECRET}
+      - ANGELONE_API_KEY=${ANGELONE_API_KEY}
+      - MAX_DAILY_LOSS_PCT=${MAX_DAILY_LOSS_PCT}
+      - MAX_POSITION_CONCENTRATION_PCT=${MAX_POSITION_CONCENTRATION_PCT}
+      - MAX_MARGIN_UTILISATION_PCT=${MAX_MARGIN_UTILISATION_PCT}
+      - KELLY_FRACTION_MULTIPLIER=${KELLY_FRACTION_MULTIPLIER}
+      - ORDER_VELOCITY_LIMIT_PER_10MIN=${ORDER_VELOCITY_LIMIT_PER_10MIN}
+      - EXPIRY_DAY_SIZE_DAMPENER=${EXPIRY_DAY_SIZE_DAMPENER}
+      - ENV=${ENV}
+      - SECRET_KEY=${SECRET_KEY}
+      - PAPER_MODE=${PAPER_MODE}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: kavach-celery-beat
+    restart: always
+    command: celery -A app.workers.celery_app.celery beat --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql://kavach:kavach@db:5432/kavach
+      - REDIS_URL=redis://redis:6379/0
+      - ANGELONE_CLIENT_CODE=${ANGELONE_CLIENT_CODE}
+      - ANGELONE_PASSWORD=${ANGELONE_PASSWORD}
+      - ANGELONE_TOTP_SECRET=${ANGELONE_TOTP_SECRET}
+      - ANGELONE_API_KEY=${ANGELONE_API_KEY}
+      - MAX_DAILY_LOSS_PCT=${MAX_DAILY_LOSS_PCT}
+      - MAX_POSITION_CONCENTRATION_PCT=${MAX_POSITION_CONCENTRATION_PCT}
+      - MAX_MARGIN_UTILISATION_PCT=${MAX_MARGIN_UTILISATION_PCT}
+      - KELLY_FRACTION_MULTIPLIER=${KELLY_FRACTION_MULTIPLIER}
+      - ORDER_VELOCITY_LIMIT_PER_10MIN=${ORDER_VELOCITY_LIMIT_PER_10MIN}
+      - EXPIRY_DAY_SIZE_DAMPENER=${EXPIRY_DAY_SIZE_DAMPENER}
+      - ENV=${ENV}
+      - SECRET_KEY=${SECRET_KEY}
+      - PAPER_MODE=${PAPER_MODE}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: kavach-frontend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  redis_data:
