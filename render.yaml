@@ -16,20 +16,7 @@ services:
           type: redis
           name: kavach-redis
           property: connectionString
-      - key: ENV
-        value: production
-      - key: PAPER_MODE
-        value: "True"
-      - key: SECRET_KEY
-        generateValue: true
-      - key: ANGELONE_CLIENT_CODE
-        sync: false
-      - key: ANGELONE_PASSWORD
-        sync: false
-      - key: ANGELONE_TOTP_SECRET
-        sync: false
-      - key: ANGELONE_API_KEY
-        sync: false
+      - group: kavach-common
 
   # 2. Celery Worker (executes risk monitoring loop)
   - type: worker
@@ -48,35 +35,7 @@ services:
           type: redis
           name: kavach-redis
           property: connectionString
-      - key: ENV
-        value: production
-      - key: PAPER_MODE
-        value: "True"
-      - key: SECRET_KEY
-        fromService:
-          type: web
-          name: kavach-backend
-          property: envVar:SECRET_KEY
-      - key: ANGELONE_CLIENT_CODE
-        fromService:
-          type: web
-          name: kavach-backend
-          property: envVar:ANGELONE_CLIENT_CODE
-      - key: ANGELONE_PASSWORD
-        fromService:
-          type: web
-          name: kavach-backend
-          property: envVar:ANGELONE_PASSWORD
-      - key: ANGELONE_TOTP_SECRET
-        fromService:
-          type: web
-          name: kavach-backend
-          property: envVar:ANGELONE_TOTP_SECRET
-      - key: ANGELONE_API_KEY
-        fromService:
-          type: web
-          name: kavach-backend
-          property: envVar:ANGELONE_API_KEY
+      - group: kavach-common
 
   # 3. Celery Beat (triggers the tick every 10s)
   - type: worker
@@ -95,35 +54,7 @@ services:
           type: redis
           name: kavach-redis
           property: connectionString
-      - key: ENV
-        value: production
-      - key: PAPER_MODE
-        value: "True"
-      - key: SECRET_KEY
-        fromService:
-          type: web
-          name: kavach-backend
-          property: envVar:SECRET_KEY
-      - key: ANGELONE_CLIENT_CODE
-        fromService:
-          type: web
-          name: kavach-backend
-          property: envVar:ANGELONE_CLIENT_CODE
-      - key: ANGELONE_PASSWORD
-        fromService:
-          type: web
-          name: kavach-backend
-          property: envVar:ANGELONE_PASSWORD
-      - key: ANGELONE_TOTP_SECRET
-        fromService:
-          type: web
-          name: kavach-backend
-          property: envVar:ANGELONE_TOTP_SECRET
-      - key: ANGELONE_API_KEY
-        fromService:
-          type: web
-          name: kavach-backend
-          property: envVar:ANGELONE_API_KEY
+      - group: kavach-common
 
   # 4. Redis Cache (pub/sub & state storage)
   - type: redis
@@ -135,3 +66,22 @@ services:
 databases:
   - name: kavach-db
     plan: free
+
+# Shared Environment Variables Group
+envVarGroups:
+  - name: kavach-common
+    envVars:
+      - key: ENV
+        value: production
+      - key: PAPER_MODE
+        value: "True"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ANGELONE_CLIENT_CODE
+        sync: false
+      - key: ANGELONE_PASSWORD
+        sync: false
+      - key: ANGELONE_TOTP_SECRET
+        sync: false
+      - key: ANGELONE_API_KEY
+        sync: false
