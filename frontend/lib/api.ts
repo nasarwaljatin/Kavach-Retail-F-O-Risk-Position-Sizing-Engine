@@ -2,10 +2,29 @@ import { useState, useEffect, useRef } from 'react';
 import { RiskState, RiskConfig, RiskEvent, DailySummary, SizingResult, Position } from './types';
 
 // Detect browser environment base API URLs
-const API_BASE = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000';
-const WS_BASE = typeof window !== 'undefined' 
-  ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`
-  : 'ws://localhost:8000';
+// Detect browser environment base API URLs
+const getApiBase = () => {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, ""); // strip trailing slash
+  }
+  return typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000';
+};
+
+const getWsBase = () => {
+  const apiBase = getApiBase();
+  try {
+    const url = new URL(apiBase);
+    const wsProtocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${wsProtocol}//${url.host}`;
+  } catch (e) {
+    return typeof window !== 'undefined'
+      ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`
+      : 'ws://localhost:8000';
+  }
+};
+
+const API_BASE = getApiBase();
+const WS_BASE = getWsBase();
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, options);
