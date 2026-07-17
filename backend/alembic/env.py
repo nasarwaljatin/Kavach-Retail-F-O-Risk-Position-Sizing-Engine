@@ -30,7 +30,7 @@ def run_migrations_offline() -> None:
 
     This configures the context with just a URL and not an Engine.
     """
-    url = settings.DATABASE_URL
+    url = settings.sqlalchemy_database_url
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -47,7 +47,7 @@ def run_migrations_online() -> None:
     In this scenario we need to create an Engine and associate a connection with the context.
     """
     configuration = config.get_section(config.config_ini_section) or {}
-    configuration["sqlalchemy.url"] = settings.DATABASE_URL
+    configuration["sqlalchemy.url"] = settings.sqlalchemy_database_url
     
     connectable = engine_from_config(
         configuration,

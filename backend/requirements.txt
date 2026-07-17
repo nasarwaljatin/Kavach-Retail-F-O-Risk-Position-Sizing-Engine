@@ -2,7 +2,7 @@ fastapi==0.115.0
 uvicorn[standard]==0.30.0
 sqlalchemy==2.0.35
 alembic==1.13.2
-psycopg2-binary==2.9.9
+pg8000==1.31.2
 redis==5.1.0
 celery==5.4.0
 smartapi-python==1.5.5

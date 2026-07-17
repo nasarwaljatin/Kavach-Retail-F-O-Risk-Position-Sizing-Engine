@@ -32,4 +32,12 @@ class Settings(BaseSettings):
         extra="ignore"
     )
 
+    @property
+    def sqlalchemy_database_url(self) -> str:
+        url = self.DATABASE_URL
+        # Replace postgresql:// with postgresql+pg8000:// to use pure-python driver
+        if url.startswith("postgresql://"):
+            return url.replace("postgresql://", "postgresql+pg8000://", 1)
+        return url
+
 settings = Settings()
