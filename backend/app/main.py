@@ -30,7 +30,19 @@ async def risk_monitor_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: spawn background risk loop
+    # Startup: seed DB defaults and spawn background risk monitoring loop
+    try:
+        from app.db.session import SessionLocal
+        from app.risk.rules_config import initialize_defaults
+        db = SessionLocal()
+        try:
+            initialize_defaults(db)
+            logger.info("Database default risk configurations verified/seeded successfully.")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Failed to seed database defaults on startup: {e}")
+
     app.state.risk_task = asyncio.create_task(risk_monitor_loop())
     yield
     # Shutdown: cancel task

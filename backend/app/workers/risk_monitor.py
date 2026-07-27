@@ -24,7 +24,6 @@ from app.risk.rules_config import get_all_config, initialize_defaults
 from app.workers.celery_app import celery
 
 logger = logging.getLogger("kavach.workers.risk_monitor")
-redis_client = redis.from_url(settings.REDIS_URL)
 broker = AngelOneBroker()
 
 def is_market_hours() -> bool:
@@ -49,9 +48,9 @@ def risk_monitor_tick():
     """
     Periodic task running every 10 seconds to monitor risk, execute breakers, and publish live state.
     """
-    # 1. Market hours guard (with development bypass)
-    if settings.ENV != "development" and not is_market_hours():
-        logger.info("Outside market hours. Skipping risk monitor tick.")
+    # 1. Market hours guard (bypassed in PAPER_MODE or development for 24/7 simulation)
+    if not settings.PAPER_MODE and settings.ENV != "development" and not is_market_hours():
+        logger.info("Outside market hours in live trading mode. Skipping risk monitor tick.")
         return "OUTSIDE_MARKET_HOURS"
 
     db: Session = SessionLocal()
