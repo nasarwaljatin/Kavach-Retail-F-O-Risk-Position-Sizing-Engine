@@ -11,37 +11,43 @@ export default function Sidebar() {
 
   useEffect(() => {
     const updateTimeAndStatus = () => {
-      // Indian Standard Time (IST) is UTC+5.5
       const now = new Date();
-      const utc = now.getTime() + now.getTimezoneOffset() * 60000;
-      const istTime = new Date(utc + 3600000 * 5.5);
       
-      const day = istTime.getDay(); // Sunday = 0, Saturday = 6
-      const hour = istTime.getHours();
-      const min = istTime.getMinutes();
-      
+      // Convert current time to IST string accurately using Intl timeZone
+      const timeFormatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Kolkata',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+      });
+      setTimeStr(timeFormatter.format(now) + ' IST');
+
+      // Check market status (IST 9:15 AM - 3:30 PM, Mon-Fri)
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Kolkata',
+        weekday: 'short',
+        hour: 'numeric',
+        minute: 'numeric',
+        hour12: false
+      }).formatToParts(now);
+
+      let weekdayStr = '';
+      let hour = 0;
+      let min = 0;
+
+      parts.forEach(part => {
+        if (part.type === 'weekday') weekdayStr = part.value;
+        if (part.type === 'hour') hour = parseInt(part.value, 10);
+        if (part.type === 'minute') min = parseInt(part.value, 10);
+      });
+
+      const isWeekday = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].includes(weekdayStr);
       const currentMinutes = hour * 60 + min;
       const startMinutes = 9 * 60 + 15; // 9:15 AM
       const endMinutes = 15 * 60 + 30; // 3:30 PM
-      
-      const isWeekday = day >= 1 && day <= 5;
-      const isMarketTime = currentMinutes >= startMinutes && currentMinutes <= endMinutes;
 
-      if (isWeekday && isMarketTime) {
-        setMarketStatus('OPEN');
-      } else {
-        setMarketStatus('CLOSED');
-      }
-
-      setTimeStr(
-        istTime.toLocaleTimeString('en-US', {
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          hour12: true,
-          timeZone: 'UTC'
-        }) + ' IST'
-      );
+      setMarketStatus(isWeekday && currentMinutes >= startMinutes && currentMinutes <= endMinutes ? 'OPEN' : 'CLOSED');
     };
 
     updateTimeAndStatus();
