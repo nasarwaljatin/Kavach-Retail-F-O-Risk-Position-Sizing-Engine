@@ -1,10 +1,15 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { getApiBase, setApiBase, api } from '@/lib/api';
 import { RiskConfig, SizingResult } from '@/lib/types';
 
 export default function SettingsPage() {
+  // Backend API URL management state
+  const [apiUrlInput, setApiUrlInput] = useState('');
+  const [testingApi, setTestingApi] = useState(false);
+  const [apiStatusMsg, setApiStatusMsg] = useState('');
+
   // Risk settings config state
   const [config, setConfig] = useState<RiskConfig | null>(null);
   const [saving, setSaving] = useState(false);
@@ -26,9 +31,43 @@ export default function SettingsPage() {
   const [calculating, setCalculating] = useState(false);
 
   useEffect(() => {
-    // Load config from backend
-    api.fetchRiskConfig().then(setConfig).catch(console.error);
+    setApiUrlInput(getApiBase());
+    // Load config from backend, fallback to default if connecting
+    api.fetchRiskConfig()
+      .then(setConfig)
+      .catch(() => {
+        setConfig({
+          maxDailyLossPct: 2.0,
+          maxPositionConcentrationPct: 20.0,
+          maxMarginUtilisationPct: 70.0,
+          kellyFractionMultiplier: 0.3,
+          orderVelocityLimitPer10Min: 5,
+          expiryDaySizeDampener: 0.5
+        });
+      });
   }, []);
+
+  const handleSaveApiUrl = async () => {
+    setTestingApi(true);
+    setApiStatusMsg('Connecting and verifying health endpoint...');
+    const ok = await api.testConnection(apiUrlInput);
+    setApiBase(apiUrlInput);
+    if (ok) {
+      setApiStatusMsg('✓ Successfully connected to backend API!');
+      // Reload config from new URL
+      api.fetchRiskConfig().then(setConfig).catch(console.error);
+    } else {
+      setApiStatusMsg('⚠️ Saved! Note: Could not reach /health at this URL. Make sure Render backend is active.');
+    }
+    setTestingApi(false);
+  };
+
+  const handleResetApiUrl = () => {
+    setApiBase('');
+    const resetUrl = getApiBase();
+    setApiUrlInput(resetUrl);
+    setApiStatusMsg('Reset to default API URL.');
+  };
 
   const handleConfigChange = (key: keyof RiskConfig, value: number) => {
     if (!config) return;
@@ -78,6 +117,49 @@ export default function SettingsPage() {
       </header>
 
       <div style={styles.grid}>
+        {/* Backend API Connection Card */}
+        <div className="glass-card" style={{ ...styles.card, flex: '1 1 100%' }}>
+          <h3 style={styles.sectionTitle}>🌐 Backend API Connection</h3>
+          <div style={styles.form}>
+            <div className="form-group">
+              <label className="form-label">Render Backend Server URL</label>
+              <div className="form-desc">
+                Enter your live Render backend URL (e.g. <code>https://kavach.onrender.com</code>).
+              </div>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '8px', flexWrap: 'wrap' }}>
+                <input 
+                  type="text" 
+                  className="form-input"
+                  placeholder="https://your-backend-name.onrender.com"
+                  value={apiUrlInput}
+                  onChange={(e) => setApiUrlInput(e.target.value)}
+                  style={{ flex: '1 1 280px' }}
+                />
+                <button 
+                  type="button" 
+                  className="btn btn-primary"
+                  onClick={handleSaveApiUrl}
+                  disabled={testingApi}
+                >
+                  {testingApi ? 'Testing...' : 'Save & Connect'}
+                </button>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary"
+                  onClick={handleResetApiUrl}
+                >
+                  Reset
+                </button>
+              </div>
+              {apiStatusMsg && (
+                <div style={{ marginTop: '10px', fontSize: '0.85rem', fontWeight: '600', color: apiStatusMsg.includes('✓') ? '#10b981' : '#f59e0b' }}>
+                  {apiStatusMsg}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Risk Config Card */}
         <div className="glass-card" style={styles.card}>
           <h3 style={styles.sectionTitle}>🛡️ Risk Engine Limits</h3>

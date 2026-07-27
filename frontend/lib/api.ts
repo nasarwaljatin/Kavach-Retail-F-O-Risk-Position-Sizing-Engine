@@ -3,14 +3,30 @@ import { RiskState, RiskConfig, RiskEvent, DailySummary, SizingResult, Position 
 
 // Detect browser environment base API URLs
 // Detect browser environment base API URLs
-const getApiBase = () => {
+export function getApiBase(): string {
+  if (typeof window !== 'undefined') {
+    const custom = localStorage.getItem('KAVACH_API_URL');
+    if (custom && custom.trim() !== '') {
+      return custom.trim().replace(/\/$/, '');
+    }
+  }
   if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, ""); // strip trailing slash
+    return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '');
   }
   return typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000';
-};
+}
 
-const getWsBase = () => {
+export function setApiBase(url: string): void {
+  if (typeof window !== 'undefined') {
+    if (!url || url.trim() === '') {
+      localStorage.removeItem('KAVACH_API_URL');
+    } else {
+      localStorage.setItem('KAVACH_API_URL', url.trim().replace(/\/$/, ''));
+    }
+  }
+}
+
+export function getWsBase(): string {
   const apiBase = getApiBase();
   try {
     const url = new URL(apiBase);
@@ -21,10 +37,7 @@ const getWsBase = () => {
       ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`
       : 'ws://localhost:8000';
   }
-};
-
-const API_BASE = getApiBase();
-const WS_BASE = getWsBase();
+}
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(url, options);
@@ -36,12 +49,22 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  async testConnection(url: string): Promise<boolean> {
+    try {
+      const cleanUrl = url.trim().replace(/\/$/, '');
+      const res = await fetch(`${cleanUrl}/health`, { method: 'GET' });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+
   async fetchLivePositions(): Promise<Position[]> {
-    return fetchJson<Position[]>(`${API_BASE}/api/positions/`);
+    return fetchJson<Position[]>(`${getApiBase()}/api/positions/`);
   },
 
   async fetchRiskState(): Promise<RiskState> {
-    const state = await fetchJson<any>(`${API_BASE}/api/risk/state`);
+    const state = await fetchJson<any>(`${getApiBase()}/api/risk/state`);
     const positions = await this.fetchLivePositions();
     return {
       ...state,
@@ -52,15 +75,15 @@ export const api = {
   },
 
   async fetchRiskEvents(): Promise<RiskEvent[]> {
-    return fetchJson<RiskEvent[]>(`${API_BASE}/api/risk/events`);
+    return fetchJson<RiskEvent[]>(`${getApiBase()}/api/risk/events`);
   },
 
   async fetchRiskConfig(): Promise<RiskConfig> {
-    return fetchJson<RiskConfig>(`${API_BASE}/api/risk/config`);
+    return fetchJson<RiskConfig>(`${getApiBase()}/api/risk/config`);
   },
 
   async updateRiskConfig(config: Partial<RiskConfig>): Promise<{ status: string; message: string }> {
-    return fetchJson<{ status: string; message: string }>(`${API_BASE}/api/risk/config`, {
+    return fetchJson<{ status: string; message: string }>(`${getApiBase()}/api/risk/config`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(config)
@@ -68,13 +91,13 @@ export const api = {
   },
 
   async triggerKillSwitch(): Promise<{ status: string; message: string; orders_placed: number }> {
-    return fetchJson<{ status: string; message: string; orders_placed: number }>(`${API_BASE}/api/killswitch/`, {
+    return fetchJson<{ status: string; message: string; orders_placed: number }>(`${getApiBase()}/api/killswitch/`, {
       method: 'POST'
     });
   },
 
   async fetchDailySummary(): Promise<DailySummary[]> {
-    return fetchJson<DailySummary[]>(`${API_BASE}/api/dashboard/summary`);
+    return fetchJson<DailySummary[]>(`${getApiBase()}/api/dashboard/summary`);
   },
 
   async computePositionSize(params: {
@@ -88,7 +111,7 @@ export const api = {
     stopDistanceMultiple?: number;
     lotSize?: number;
   }): Promise<SizingResult> {
-    return fetchJson<SizingResult>(`${API_BASE}/api/risk/size`, {
+    return fetchJson<SizingResult>(`${getApiBase()}/api/risk/size`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params)
@@ -101,7 +124,7 @@ export function useRiskWebSocket(onMessage: (state: RiskState) => void) {
   const socketRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    let wsUrl = `${WS_BASE}/ws/risk`;
+    let wsUrl = `${getWsBase()}/ws/risk`;
     // If proxied locally during development, resolve port
     if (wsUrl.includes('3000')) {
       wsUrl = wsUrl.replace('3000', '8000');
