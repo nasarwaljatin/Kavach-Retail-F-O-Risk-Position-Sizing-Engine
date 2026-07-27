@@ -9,18 +9,23 @@ interface PnLCardProps {
   maxDailyLossPct: number;
 }
 
-export default function PnLCard({ dayPnl, dayPnlPct, capitalBase, maxDailyLossPct }: PnLCardProps) {
-  const isLoss = dayPnl < 0;
-  const formattedPnL = (dayPnl >= 0 ? '+' : '') + dayPnl.toLocaleString('en-IN', {
+export default function PnLCard({ dayPnl = 0, dayPnlPct = 0, capitalBase = 100000, maxDailyLossPct = 2.0 }: PnLCardProps) {
+  const safePnl = dayPnl ?? 0;
+  const safePnlPct = dayPnlPct ?? 0;
+  const safeCapital = capitalBase || 100000.0;
+  const safeMaxLossPct = maxDailyLossPct || 2.0;
+
+  const isLoss = safePnl < 0;
+  const formattedPnL = (safePnl >= 0 ? '+' : '') + safePnl.toLocaleString('en-IN', {
     style: 'currency',
     currency: 'INR',
     maximumFractionDigits: 2
   });
 
   // Calculate percentage of daily loss budget consumed
-  const dailyLossLimitVal = capitalBase * (maxDailyLossPct / 100);
+  const dailyLossLimitVal = safeCapital * (safeMaxLossPct / 100);
   const lossBudgetConsumedPct = isLoss 
-    ? Math.min((Math.abs(dayPnl) / dailyLossLimitVal) * 100, 100) 
+    ? Math.min((Math.abs(safePnl) / (dailyLossLimitVal || 1)) * 100, 100) 
     : 0;
 
   let progressColor = '#10b981'; // Green for profit

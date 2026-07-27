@@ -16,7 +16,8 @@ def get_live_positions():
     try:
         if not broker.authenticated:
             broker.authenticate()
-        positions = broker.get_positions()
+        margins = broker.get_margins()
+        capital_base = margins.net if margins.net > 0 else 100000.0
         return [
             {
                 "symbol": p.symbol,
@@ -27,7 +28,8 @@ def get_live_positions():
                 "pnl": p.pnl,
                 "productType": p.product_type,
                 "instrumentType": p.instrument_type,
-                "exposure": p.exposure
+                "exposure": p.exposure,
+                "concentrationPct": round((p.exposure / capital_base) * 100, 2) if capital_base > 0 else 0.0
             }
             for p in positions
         ]

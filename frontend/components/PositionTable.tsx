@@ -34,8 +34,15 @@ export default function PositionTable({ positions }: PositionTableProps) {
             </thead>
             <tbody>
               {positions.map((pos) => {
-                const isLoss = pos.pnl < 0;
-                const isHighConcentration = pos.concentrationPct >= 20.0;
+                const qty = pos.qty ?? 0;
+                const avgPrice = pos.avgPrice ?? 0;
+                const ltp = pos.ltp ?? 0;
+                const exposure = pos.exposure ?? 0;
+                const concentrationPct = pos.concentrationPct ?? 0;
+                const pnl = pos.pnl ?? 0;
+
+                const isLoss = pnl < 0;
+                const isHighConcentration = concentrationPct >= 20.0;
                 
                 return (
                   <tr key={pos.symbol}>
@@ -44,26 +51,26 @@ export default function PositionTable({ positions }: PositionTableProps) {
                       <span className={`badge ${
                         pos.instrumentType === 'EQ' ? 'badge-safe' : 'badge-danger'
                       }`} style={styles.instBadge}>
-                        {pos.instrumentType}
+                        {pos.instrumentType || 'F&O'}
                       </span>
                     </td>
-                    <td>{pos.exchange}</td>
-                    <td style={{ fontWeight: '600' }}>{pos.qty}</td>
-                    <td>₹{pos.avgPrice.toFixed(2)}</td>
-                    <td>₹{pos.ltp.toFixed(2)}</td>
-                    <td>₹{pos.exposure.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
+                    <td>{pos.exchange || 'NFO'}</td>
+                    <td style={{ fontWeight: '600' }}>{qty}</td>
+                    <td>₹{avgPrice.toFixed(2)}</td>
+                    <td>₹{ltp.toFixed(2)}</td>
+                    <td>₹{exposure.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</td>
                     <td>
                       <div style={styles.concentrationCol}>
                         <span style={{ 
                           fontWeight: '600',
                           color: isHighConcentration ? '#ef4444' : '#f8fafc'
                         }}>
-                          {pos.concentrationPct.toFixed(1)}%
+                          {concentrationPct.toFixed(1)}%
                         </span>
                         <div style={styles.miniBarBg}>
                           <div style={{
                             ...styles.miniBarFill,
-                            width: `${Math.min(pos.concentrationPct, 100)}%`,
+                            width: `${Math.min(Math.max(concentrationPct, 0), 100)}%`,
                             backgroundColor: isHighConcentration ? '#ef4444' : '#3b82f6'
                           }} />
                         </div>
@@ -73,7 +80,7 @@ export default function PositionTable({ positions }: PositionTableProps) {
                       ...styles.pnlCell,
                       color: isLoss ? '#ef4444' : '#10b981'
                     }}>
-                      {pos.pnl >= 0 ? '+' : ''}₹{pos.pnl.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {pnl >= 0 ? '+' : ''}₹{pnl.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                   </tr>
                 );

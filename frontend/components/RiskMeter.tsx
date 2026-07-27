@@ -8,23 +8,27 @@ interface RiskMeterProps {
   riskLevel: 'safe' | 'warning' | 'danger';
 }
 
-export default function RiskMeter({ marginUtilisationPct, activeBreakers, riskLevel }: RiskMeterProps) {
+export default function RiskMeter({ marginUtilisationPct = 0, activeBreakers = [], riskLevel = 'safe' }: RiskMeterProps) {
+  const safeMargin = marginUtilisationPct ?? 0;
+  const safeBreakers = activeBreakers ?? [];
+  const safeLevel = riskLevel || 'safe';
+
   // SVGs for circle gauges
   const radius = 60;
   const strokeWidth = 10;
   const circumference = 2 * Math.PI * radius;
   
   // Cap margin utilisation at 100 for gauge sizing
-  const capUtilisation = Math.min(Math.max(marginUtilisationPct, 0), 100);
+  const capUtilisation = Math.min(Math.max(safeMargin, 0), 100);
   const strokeDashoffset = circumference - (capUtilisation / 100) * circumference;
 
   let meterColor = '#10b981'; // safe green
   let glowColor = 'rgba(16, 185, 129, 0.2)';
   
-  if (riskLevel === 'warning') {
+  if (safeLevel === 'warning') {
     meterColor = '#f59e0b'; // amber
     glowColor = 'rgba(245, 158, 11, 0.2)';
-  } else if (riskLevel === 'danger') {
+  } else if (safeLevel === 'danger') {
     meterColor = '#ef4444'; // red
     glowColor = 'rgba(239, 68, 68, 0.3)';
   }
@@ -78,7 +82,7 @@ export default function RiskMeter({ marginUtilisationPct, activeBreakers, riskLe
             fontWeight="800"
             dy=".3em"
           >
-            {marginUtilisationPct.toFixed(0)}%
+            {safeMargin.toFixed(0)}%
           </text>
           <text
             x="75"
@@ -96,11 +100,11 @@ export default function RiskMeter({ marginUtilisationPct, activeBreakers, riskLe
 
       <div style={styles.breakersBox}>
         <div style={styles.breakersLabel}>Active Risk Triggers:</div>
-        {activeBreakers.length === 0 ? (
+        {safeBreakers.length === 0 ? (
           <div style={styles.noBreakers}>✓ System standing by. No limits breached.</div>
         ) : (
           <div style={styles.breakersList}>
-            {activeBreakers.map((breaker) => (
+            {safeBreakers.map((breaker) => (
               <span key={breaker} className="badge badge-danger" style={styles.breakerBadge}>
                 ⚠️ {breaker}
               </span>
