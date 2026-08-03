@@ -4,6 +4,7 @@ from app.models.position import PositionSnapshot
 from app.models.risk_event import RiskEvent
 from app.models.risk_config import RiskConfig
 from app.models.daily_summary import DailySummary
+from app.models.paper_order import PaperOrder
 
 __all__ = [
     "Base",
@@ -12,4 +13,5 @@ __all__ = [
     "RiskEvent",
     "RiskConfig",
     "DailySummary",
+    "PaperOrder",
 ]

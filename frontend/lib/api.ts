@@ -119,50 +119,93 @@ export const api = {
   }
 };
 
-export function useRiskWebSocket(onMessage: (state: RiskState) => void) {
-  const [connected, setConnected] = useState(false);
+export function useRiskWebSocket(onMessage: (state: RiskState) => void): 'live' | 'reconnecting' | 'disconnected' {
+  const [wsStatus, setWsStatus] = useState<'live' | 'reconnecting' | 'disconnected'>('disconnected');
   const socketRef = useRef<WebSocket | null>(null);
+  const retryCountRef = useRef(0);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
+  const onMessageRef = useRef(onMessage);
 
+  // Keep callback ref current without re-running effect
   useEffect(() => {
-    let wsUrl = `${getWsBase()}/ws/risk`;
-    // If proxied locally during development, resolve port
-    if (wsUrl.includes('3000')) {
-      wsUrl = wsUrl.replace('3000', '8000');
-    }
-    
-    const socket = new WebSocket(wsUrl);
-    socketRef.current = socket;
-
-    socket.onopen = () => {
-      setConnected(true);
-      console.log('Kavach live stream connected.');
-    };
-
-    socket.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'ACK') {
-          return;
-        }
-        onMessage(data as RiskState);
-      } catch (err) {
-        console.error('Failed to parse WebSocket message', err);
-      }
-    };
-
-    socket.onclose = () => {
-      setConnected(false);
-      console.log('Kavach live stream disconnected.');
-    };
-
-    socket.onerror = (error) => {
-      console.error('WebSocket error', error);
-    };
-
-    return () => {
-      socket.close();
-    };
+    onMessageRef.current = onMessage;
   }, [onMessage]);
 
-  return connected;
+  useEffect(() => {
+    mountedRef.current = true;
+
+    function getWsUrl(): string {
+      let base = `${getWsBase()}/ws/risk`;
+      // Dev convenience: if WS base still points to the Next.js dev port, redirect to backend
+      if (base.includes(':3000')) base = base.replace(':3000', ':8000');
+      return base;
+    }
+
+    function connect() {
+      if (!mountedRef.current) return;
+
+      try {
+        const ws = new WebSocket(getWsUrl());
+        socketRef.current = ws;
+
+        ws.onopen = () => {
+          if (!mountedRef.current) return;
+          retryCountRef.current = 0;
+          setWsStatus('live');
+          console.info('[Kavach WS] Connected to live risk stream.');
+        };
+
+        ws.onmessage = (event) => {
+          if (!mountedRef.current) return;
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'ACK') return; // connection ack, ignore
+            onMessageRef.current(data as RiskState);
+          } catch (err) {
+            console.error('[Kavach WS] Failed to parse message:', err);
+          }
+        };
+
+        ws.onclose = () => {
+          if (!mountedRef.current) return;
+          setWsStatus('reconnecting');
+          scheduleReconnect();
+        };
+
+        ws.onerror = () => {
+          // onclose fires after onerror, so just log here
+          console.warn('[Kavach WS] Socket error — will attempt reconnect.');
+        };
+      } catch (err) {
+        console.error('[Kavach WS] Failed to open socket:', err);
+        setWsStatus('reconnecting');
+        scheduleReconnect();
+      }
+    }
+
+    function scheduleReconnect() {
+      if (!mountedRef.current) return;
+      // Exponential backoff: 1s, 2s, 4s, 8s, 16s, max 30s
+      const delay = Math.min(1000 * Math.pow(2, retryCountRef.current), 30_000);
+      retryCountRef.current += 1;
+      console.info(`[Kavach WS] Reconnecting in ${delay / 1000}s (attempt ${retryCountRef.current})...`);
+      retryTimerRef.current = setTimeout(connect, delay);
+    }
+
+    connect();
+
+    return () => {
+      mountedRef.current = false;
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+      if (socketRef.current) {
+        socketRef.current.onclose = null; // prevent reconnect loop on intentional unmount
+        socketRef.current.close();
+      }
+      setWsStatus('disconnected');
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount — reconnect is handled internally
+
+  return wsStatus;
 }

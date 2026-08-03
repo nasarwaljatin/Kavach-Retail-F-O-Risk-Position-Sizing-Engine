@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-me-in-production"
     PAPER_MODE: bool = True
 
+    # Telegram alerting (optional — leave empty to disable)
+    TELEGRAM_BOT_TOKEN: str = ""
+    TELEGRAM_CHAT_ID: str = ""
+
     # Load environment variables from a file if it exists, otherwise just from system env
     model_config = SettingsConfigDict(
         env_file=".env",

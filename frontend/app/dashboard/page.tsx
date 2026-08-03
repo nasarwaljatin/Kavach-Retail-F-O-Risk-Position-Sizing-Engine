@@ -95,8 +95,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadData();
-    // Regular polling fallback every 10s
-    const interval = setInterval(loadData, 10000);
+    // HTTP polling every 30s as dead-man fallback (WS handles freshness)
+    const interval = setInterval(loadData, 30000);
     return () => clearInterval(interval);
   }, [loadData]);
 
@@ -115,7 +115,7 @@ export default function DashboardPage() {
     api.fetchRiskEvents().then(setEvents).catch(console.error);
   }, []);
 
-  const wsConnected = useRiskWebSocket(handleLiveStateUpdate);
+  const wsStatus = useRiskWebSocket(handleLiveStateUpdate);
 
   const handleKillSwitchTriggered = () => {
     loadData();
@@ -149,10 +149,20 @@ export default function DashboardPage() {
         <div style={styles.connectionBox}>
           <span style={{
             ...styles.indicatorDot,
-            backgroundColor: wsConnected ? '#10b981' : backendConnected ? '#3b82f6' : '#f59e0b'
+            backgroundColor:
+              wsStatus === 'live' ? '#10b981' :
+              wsStatus === 'reconnecting' ? '#f59e0b' :
+              backendConnected ? '#3b82f6' : '#ef4444',
+            animation: wsStatus === 'reconnecting' ? 'pulse 1.5s ease-in-out infinite' : undefined,
           }} />
           <span style={styles.connectionText}>
-            {wsConnected ? 'LIVE FEED CONNECTED' : backendConnected ? 'POLLING SYNC ACTIVE' : 'PAPER MODE ACTIVE'}
+            {wsStatus === 'live'
+              ? 'LIVE FEED CONNECTED'
+              : wsStatus === 'reconnecting'
+              ? 'RECONNECTING…'
+              : backendConnected
+              ? 'POLLING FALLBACK'
+              : 'BACKEND OFFLINE'}
           </span>
         </div>
       </header>

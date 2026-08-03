@@ -34,6 +34,9 @@ redis_data/
 *.db
 *.sqlite3
 
+# Instrument master cache (downloaded daily, ~25 MB)
+backend/data/*.json
+
 # IDE / OS Files
 .vscode/
 .idea/

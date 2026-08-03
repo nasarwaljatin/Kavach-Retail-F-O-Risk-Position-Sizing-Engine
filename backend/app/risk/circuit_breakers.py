@@ -3,6 +3,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List
 
+# is_expiry_day is implemented in expiry_calendar.py (NSE-verified date set).
+# Re-exported here so existing callers importing from circuit_breakers still work.
+from app.risk.expiry_calendar import is_expiry_day  # noqa: F401
+
 logger = logging.getLogger("kavach.risk.circuit_breakers")
 
 @dataclass
@@ -29,17 +33,6 @@ class BreakerConfig:
     order_velocity_limit_per_10min: int = 5
     expiry_day_size_dampener: float = 0.5
 
-def is_expiry_day(dt: datetime) -> bool:
-    """
-    Checks if a given date is an F&O expiry day.
-    In India:
-    - Nifty / NFO weekly options expire on Thursdays.
-    - Bank Nifty weekly options expire on Wednesdays.
-    - Monthly contracts expire on the last Thursday of the month.
-    """
-    # 2 is Wednesday, 3 is Thursday (0-indexed starting Monday)
-    day_of_week = dt.weekday()
-    return day_of_week in (2, 3)
 
 def check_circuit_breakers(account_state: AccountState, config: BreakerConfig) -> List[str]:
     """

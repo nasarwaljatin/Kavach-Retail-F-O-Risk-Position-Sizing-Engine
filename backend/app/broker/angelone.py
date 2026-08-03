@@ -7,6 +7,7 @@ from datetime import datetime
 
 from app.core.config import settings
 from app.broker.base import BaseBroker, Position, MarginData, OrderParams, OrderResult
+from app.broker.instrument_master import resolve_token as im_resolve_token
 
 # Try importing SmartConnect from SmartApi. Handle import errors gracefully for local testing.
 try:
@@ -209,24 +210,50 @@ class AngelOneBroker(BaseBroker):
 
         try:
             response = self.obj.rmsLimit()
+
+            # Task 5: Log raw response at DEBUG level for live-account field verification.
+            # Field names last verified: PENDING (run against real account to confirm).
+            # Known Angel One rmsLimit fields (as documented in SmartAPI v1.5):
+            #   net, availablecash, utiliseddebits, utilisedspan,
+            #   utilisedoptionpremium, utilisedexposure, utilisedmargin,
+            #   collateral, m2munrealized, m2mrealized
+            if settings.ENV == "development":
+                logger.debug("rmsLimit raw response: %s", response)
+
             if response.get("status") is True and response.get("data") is not None:
                 data = response.get("data")
-                
+
                 net = float(data.get("net", 0.0))
                 cash = float(data.get("availablecash", 0.0))
-                
-                # Compute used margin from standard debits
-                used = float(data.get("utiliseddebits", 0.0)) + \
-                       float(data.get("utilisedspan", 0.0)) + \
-                       float(data.get("utilisedoptionpremium", 0.0)) + \
-                       float(data.get("utilisedexposure", 0.0))
-                       
-                collateral = float(data.get("collateral", 0.0))
-                unrealized = float(data.get("m2munrealized", 0.0))
-                realized = float(data.get("m2mrealized", 0.0))
-                
+
+                # Defensive field resolution: try multiple known field-name variants.
+                # Angel One API has inconsistent field names across SDK versions.
+                def _f(d: dict, *keys: str) -> float:
+                    for k in keys:
+                        v = d.get(k)
+                        if v is not None:
+                            try:
+                                return float(v)
+                            except (TypeError, ValueError):
+                                pass
+                    return 0.0
+
+                # Prefer the aggregate field; fall back to component sum.
+                used_direct = _f(data, "utilisedmargin", "usedmargin")
+                used_computed = (
+                    _f(data, "utiliseddebits")
+                    + _f(data, "utilisedspan")
+                    + _f(data, "utilisedoptionpremium")
+                    + _f(data, "utilisedexposure")
+                )
+                used = used_direct if used_direct > 0 else used_computed
+
+                collateral = _f(data, "collateral")
+                unrealized = _f(data, "m2munrealized")
+                realized = _f(data, "m2mrealized")
+
                 utilisation_pct = (used / net) * 100 if net > 0 else 0.0
-                
+
                 return MarginData(
                     net=net,
                     available_cash=cash,
@@ -234,14 +261,14 @@ class AngelOneBroker(BaseBroker):
                     collateral=collateral,
                     unrealized_mtm=unrealized,
                     realized_mtm=realized,
-                    utilisation_pct=utilisation_pct
+                    utilisation_pct=utilisation_pct,
                 )
             else:
                 logger.error(f"Failed to fetch margins: {response.get('message')}")
-                return MarginData(0,0,0,0,0,0,0)
+                return MarginData(0, 0, 0, 0, 0, 0, 0)
         except Exception as e:
             logger.exception(f"Exception fetching margins: {e}")
-            return MarginData(0,0,0,0,0,0,0)
+            return MarginData(0, 0, 0, 0, 0, 0, 0)
 
     def get_quote(self, exchange: str, symbol: str, token: str) -> Dict:
         if self._is_mock_mode() or not self.obj:
@@ -251,8 +278,14 @@ class AngelOneBroker(BaseBroker):
                     return {"ltp": mp["ltp"], "symbol": symbol, "exchange": exchange, "token": token}
             return {"ltp": 100.0, "symbol": symbol, "exchange": exchange, "token": token}
 
+        # Auto-resolve token if caller didn't supply one
+        resolved_token = token or im_resolve_token(symbol, exchange)
+        if not resolved_token:
+            logger.warning("get_quote: could not resolve token for %s/%s", exchange, symbol)
+            return {}
+
         try:
-            response = self.obj.ltpData(exchange, symbol, token)
+            response = self.obj.ltpData(exchange, symbol, resolved_token)
             if response.get("status") is True:
                 return response.get("data", {})
             return {}
@@ -323,10 +356,19 @@ class AngelOneBroker(BaseBroker):
             return OrderResult(order_id=order_id, status="SUCCESS", message="Simulated order placed successfully.")
 
         try:
+            # Resolve token if not already provided
+            token = params.symbol_token or im_resolve_token(params.symbol, params.exchange)
+            if not token:
+                logger.error(
+                    "place_order: cannot resolve symboltoken for %s/%s — order aborted.",
+                    params.exchange, params.symbol
+                )
+                return OrderResult(order_id="", status="ERROR", message="symboltoken not resolved")
+
             orderparams = {
                 "variety": "NORMAL",
                 "tradingsymbol": params.symbol,
-                "symboltoken": params.symbol_token,
+                "symboltoken": token,
                 "transactiontype": params.transaction_type,
                 "exchange": params.exchange,
                 "ordertype": params.order_type,

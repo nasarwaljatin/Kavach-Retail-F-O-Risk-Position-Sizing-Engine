@@ -7,24 +7,26 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.session import SessionLocal
-from app.broker.angelone import AngelOneBroker
+from app.broker.factory import get_broker
 from app.broker.base import OrderParams
 from app.models.position import PositionSnapshot
 from app.models.risk_event import RiskEvent
 from app.models.daily_summary import DailySummary
 from app.models.trade import Trade
+from app.core.alerts import send_telegram_alert, format_risk_alert
 from app.risk.circuit_breakers import (
     AccountState,
     PositionState,
     BreakerConfig,
     check_circuit_breakers,
-    is_expiry_day as check_expiry_day
 )
+from app.risk.expiry_calendar import is_expiry_day as check_expiry_day
 from app.risk.rules_config import get_all_config, initialize_defaults
 from app.workers.celery_app import celery
 
 logger = logging.getLogger("kavach.workers.risk_monitor")
-broker = AngelOneBroker()
+# broker is initialised once at module level; factory decides paper vs live.
+broker = get_broker()
 
 def is_market_hours() -> bool:
     """
@@ -131,14 +133,10 @@ def risk_monitor_tick():
             
             if should_square_off:
                 action_taken = "squared_off"
-                if not settings.PAPER_MODE:
-                    logger.warning("LIVE MODE: Executing emergency square off!")
-                    broker.square_off_all()
-                else:
-                    logger.info("PAPER MODE: Logging simulated square-off.")
-                    # Simulate squaring off positions in broker
-                    if broker._is_mock_mode():
-                        broker.square_off_all()
+                # PaperBrokerAdapter handles paper vs live automatically.
+                # In paper mode it writes to paper_orders; in live mode it places real orders.
+                logger.warning("Auto square-off triggered — delegating to broker (paper=%s).", settings.PAPER_MODE)
+                broker.square_off_all()
 
             # Record risk event to DB
             event_details = {
@@ -168,6 +166,17 @@ def risk_monitor_tick():
                 )
                 db.add(event)
                 db.commit()
+
+                # Task 6: Send Telegram alert for any non-trivial action
+                if action_taken != "none":
+                    alert_msg = format_risk_alert(
+                        action_taken=action_taken,
+                        triggered_breakers=triggered_breakers,
+                        day_pnl=day_pnl,
+                        capital_base=capital_base,
+                        paper_mode=settings.PAPER_MODE,
+                    )
+                    send_telegram_alert(alert_msg)
 
         # 8. Record snapshots of open positions
         for pos in positions:
