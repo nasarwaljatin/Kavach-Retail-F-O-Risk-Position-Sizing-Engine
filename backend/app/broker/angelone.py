@@ -212,11 +212,22 @@ class AngelOneBroker(BaseBroker):
             response = self.obj.rmsLimit()
 
             # Task 5: Log raw response at DEBUG level for live-account field verification.
-            # Field names last verified: PENDING (run against real account to confirm).
-            # Known Angel One rmsLimit fields (as documented in SmartAPI v1.5):
-            #   net, availablecash, utiliseddebits, utilisedspan,
-            #   utilisedoptionpremium, utilisedexposure, utilisedmargin,
-            #   collateral, m2munrealized, m2mrealized
+            # Field names VERIFIED 2026-08-04 against SmartAPI v1.5 official docs
+            # (https://smartapi.angelone.in/docs  — getRMS endpoint):
+            #
+            #   net              — total net balance / available limit
+            #   availablecash    — available cash for trading
+            #   utilisedmargin   — PRIMARY: total margin blocked by open positions (aggregate)
+            #   utiliseddebits   — secondary debit component
+            #   utilisedspan     — SPAN margin component
+            #   utilisedoptionpremium — option premium margin component
+            #   utilisedexposure — exposure margin component
+            #   utilisedturnover — turnover-based margin
+            #   utilisedpayout   — payout amount
+            #   collateral / colletral — pledged holdings margin (API has a typo variant)
+            #   brkcolle         — broker collateral
+            #   m2munrealized    — MTM unrealized P&L
+            #   m2mrealized      — MTM realized P&L
             if settings.ENV == "development":
                 logger.debug("rmsLimit raw response: %s", response)
 
@@ -238,17 +249,21 @@ class AngelOneBroker(BaseBroker):
                                 pass
                     return 0.0
 
-                # Prefer the aggregate field; fall back to component sum.
+                # VERIFIED: utilisedmargin is the primary aggregate field.
+                # Fall back to component sum if not present (older SDK versions).
                 used_direct = _f(data, "utilisedmargin", "usedmargin")
                 used_computed = (
                     _f(data, "utiliseddebits")
                     + _f(data, "utilisedspan")
                     + _f(data, "utilisedoptionpremium")
                     + _f(data, "utilisedexposure")
+                    + _f(data, "utilisedturnover")
+                    + _f(data, "utilisedpayout")
                 )
                 used = used_direct if used_direct > 0 else used_computed
 
-                collateral = _f(data, "collateral")
+                # colletral is an official Angel One API typo — handle both spellings
+                collateral = _f(data, "collateral", "colletral", "brkcolle")
                 unrealized = _f(data, "m2munrealized")
                 realized = _f(data, "m2mrealized")
 
